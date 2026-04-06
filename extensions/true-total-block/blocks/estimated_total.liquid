@@ -1,0 +1,121 @@
+{% schema %}
+{
+  "name": "Estimated Total",
+  "target": "section",
+  "templates": ["product"],
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "use_flat_rate",
+      "label": "Use Flat Rate Override",
+      "default": false
+    },
+    {
+      "type": "number",
+      "id": "flat_shipping_rate",
+      "label": "Flat Shipping Rate (Cents)",
+      "default": 500,
+      "info": "Example: 500 for 5.00"
+    },
+    {
+      "type": "number",
+      "id": "flat_tax_rate_percent",
+      "label": "Flat Tax Rate (%)",
+      "default": 10
+    },
+    {
+      "type": "range",
+      "id": "font_size",
+      "min": 5,
+      "max": 24,
+      "step": 1,
+      "unit": "px",
+      "label": "Font Size",
+      "default": 16
+    },
+    {
+      "type": "text",
+      "id": "message_template",
+      "label": "Message Template",
+      "default": "Estimated total with shipping and tax for {city}, {country}: {price}",
+      "info": "Use {city}, {country}, and {price} as placeholders."
+    }
+  ]
+}
+{% endschema %}
+
+<div 
+  class="estimated-total-container" 
+  data-product-price="{{ product.price }}" 
+  data-use-flat-rate="{{ block.settings.use_flat_rate }}" 
+  data-flat-shipping="{{ block.settings.flat_shipping_rate }}" 
+  data-flat-tax-percent="{{ block.settings.flat_tax_rate_percent }}"
+  data-currency-code="{{ cart.currency.iso_code | default: 'USD' }}"
+  data-message-template="{{ block.settings.message_template | escape }}"
+  style="margin: 10px 0; padding: 10px; border: 1px solid #eaeaea; border-radius: 4px;"
+>
+  <p id="estimated-total-message" style="margin: 0; font-weight: bold; color: #333; font-size: {{ block.settings.font_size }}px;">Calculating estimated total...</p>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const container = document.querySelector('.estimated-total-container');
+    if (!container) return;
+
+    const basePriceCents = parseInt(container.getAttribute('data-product-price'), 10) || 0;
+    const useFlatRate = container.getAttribute('data-use-flat-rate') === 'true';
+    const flatShippingCents = parseInt(container.getAttribute('data-flat-shipping'), 10) || 0;
+    const flatTaxPercent = parseFloat(container.getAttribute('data-flat-tax-percent')) || 0;
+    const currencyCode = container.getAttribute('data-currency-code') || 'USD';
+    const messageTemplate = container.getAttribute('data-message-template');
+
+    const messageEl = document.getElementById('estimated-total-message');
+
+    // Helper to format currency
+    const formatCurrency = (cents) => {
+      const formatter = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencyCode,
+      });
+      return formatter.format(cents / 100);
+    };
+
+    // Helper to calculate and display total
+    const displayTotal = (shippingCents, taxPercent, city, country) => {
+      const estimatedTotalCents = Math.round((basePriceCents + shippingCents) * (1 + (taxPercent / 100)));
+      const formattedTotal = formatCurrency(estimatedTotalCents);
+      
+      let message = messageTemplate
+        .replace('{city}', city || 'your location')
+        .replace('{country}', country || '')
+        .replace('{price}', formattedTotal);
+      
+      message = message.replace(', ,', ',').replace(' ,', '').trim();
+      messageEl.textContent = message;
+    };
+
+    const fetchLocation = async () => {
+      try {
+        const response = await fetch('https://ipinfo.io/json');
+        if (!response.ok) throw new Error('ipinfo.io failed');
+        const data = await response.json();
+        
+        // ipinfo.io returns 'city' and 'country' (country code)
+        // For a more user-friendly name, we can just use the code or a simple mapping
+        displayTotal(800, 7.5, data.city, data.country);
+      } catch (e) {
+        console.error('Error fetching location:', e);
+        // Fallback: use flat rates
+        displayTotal(flatShippingCents, flatTaxPercent, 'your location', '');
+      }
+    };
+
+    // If using flat rate, bypass API
+    if (useFlatRate) {
+      displayTotal(flatShippingCents, flatTaxPercent, 'your location', '');
+      return;
+    }
+
+    fetchLocation();
+  });
+</script>
