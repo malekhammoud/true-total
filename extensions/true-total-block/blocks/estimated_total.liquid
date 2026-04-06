@@ -39,8 +39,8 @@
       "type": "text",
       "id": "message_template",
       "label": "Message Template",
-      "default": "Estimated total with shipping and tax for {country}: {price}",
-      "info": "Use {country} and {price} as placeholders."
+      "default": "Estimated total with shipping and tax for {city}, {country}: {price}",
+      "info": "Use {city}, {country}, and {price} as placeholders."
     }
   ]
 }
@@ -49,15 +49,17 @@
 <div 
   class="estimated-total-container" 
   data-product-price="{{ product.price }}" 
+  data-variant-id="{{ product.selected_or_first_available_variant.id }}"
   data-use-default-only="{{ block.settings.use_default_only }}" 
   data-default-shipping="{{ block.settings.default_shipping_rate }}" 
   data-default-tax="{{ block.settings.default_tax_rate }}"
   data-currency-code="{{ cart.currency.iso_code | default: localization.country.currency.iso_code }}"
   data-country-code="{{ localization.country.iso_code }}"
   data-country-name="{{ localization.country.name }}"
+  data-taxes-included="{{ shop.taxes_included }}"
   data-money-format="{{ shop.money_format | escape }}"
   data-message-template="{{ block.settings.message_template | escape }}"
-  style="margin: 10px 0; padding: 10px; border: 1px solid #eaeaea; border-radius: 4px;"
+  style="margin: 10px 0; padding: 10px; border: 1px solid #eaeaea; border-radius: 4px; display: flex; align-items: center; gap: 10px;"
 >
   <p id="estimated-total-message" style="margin: 0; font-weight: bold; color: #333; font-size: {{ block.settings.font_size }}px;">
     Calculating estimated total...
@@ -71,9 +73,11 @@
 
     const config = {
       basePriceCents: parseInt(container.getAttribute('data-product-price'), 10) || 0,
+      variantId: container.getAttribute('data-variant-id'),
       useDefaultOnly: container.getAttribute('data-use-default-only') === 'true',
       defaultShippingCents: parseInt(container.getAttribute('data-default-shipping'), 10) || 0,
       defaultTaxPercent: parseFloat(container.getAttribute('data-default-tax')) || 0,
+      taxesIncluded: container.getAttribute('data-taxes-included') === 'true',
       currencyCode: container.getAttribute('data-currency-code') || 'USD',
       countryCode: container.getAttribute('data-country-code'),
       countryName: container.getAttribute('data-country-name'),
@@ -85,20 +89,9 @@
 
     // Robust tax rate estimations for common markets
     const countryTaxRates = {
-      'US': 8.5,   // Average US state tax
-      'CA': 13.0,  // Average Canadian HST/GST
-      'GB': 20.0,  // UK VAT
-      'AU': 10.0,  // AU GST
-      'DE': 19.0,  // DE VAT
-      'FR': 20.0,  // FR VAT
-      'IT': 22.0,  // IT VAT
-      'ES': 21.0,  // ES VAT
-      'NL': 21.0,  // NL VAT
-      'JP': 10.0,  // JP VAT
-      'SG': 8.0,   // SG GST
-      'BR': 60.0,  // Brazil import tax estimate
-      'MX': 16.0,  // MX VAT
-      'IN': 18.0   // IN GST
+      'US': 8.5, 'CA': 13.0, 'GB': 20.0, 'AU': 10.0, 'DE': 19.0, 'FR': 20.0,
+      'IT': 22.0, 'ES': 21.0, 'NL': 21.0, 'JP': 10.0, 'SG': 8.0, 'BR': 60.0,
+      'MX': 16.0, 'IN': 18.0
     };
 
     const formatPrice = (cents) => {
@@ -112,15 +105,37 @@
     };
 
     const updateUI = (shippingCents, taxPercent, city, country) => {
-      const taxAmount = (config.basePriceCents + shippingCents) * (taxPercent / 100);
-      const totalCents = config.basePriceCents + shippingCents + taxAmount;
+      // Logic: If shop.taxes_included is true, basePrice already has tax.
+      // We only calculate tax on the shipping, or skip tax addition if already covered.
+      let taxAmountCents = 0;
+      
+      if (config.taxesIncluded) {
+        // Tax is already in the base price. 
+        // We only add tax to the shipping portion (if the region requires it).
+        taxAmountCents = Math.round(shippingCents * (taxPercent / 100));
+      } else {
+        // Tax is NOT in the price. Add it to both product and shipping.
+        taxAmountCents = Math.round((config.basePriceCents + shippingCents) * (taxPercent / 100));
+      }
+
+      const finalTotalCents = config.basePriceCents + shippingCents + taxAmountCents;
+      
+      console.log('True Total Calculation Breakdown:', {
+        basePrice: formatPrice(config.basePriceCents),
+        shipping: formatPrice(shippingCents),
+        taxRate: taxPercent + '%',
+        taxAdded: formatPrice(taxAmountCents),
+        taxesAlreadyIncludedInPrice: config.taxesIncluded,
+        finalTotal: formatPrice(finalTotalCents)
+      });
+
+      const formattedPrice = formatPrice(finalTotalCents);
       
       let message = config.messageTemplate
         .replace('{city}', city || '')
         .replace('{country}', country || config.countryName)
-        .replace('{price}', formatPrice(totalCents));
+        .replace('{price}', formattedPrice);
       
-      // Cleanup cleanup
       message = message.replace(', ,', ',').replace(' ,', '').replace(/  +/g, ' ').trim();
       messageEl.textContent = message;
     };
@@ -128,20 +143,8 @@
     const normalizeZip = (zip, countryCode) => {
       if (!zip) return '';
       const cleanZip = zip.replace(/\s+/g, '').toUpperCase();
-      
-      if (countryCode === 'CA') {
-        // Shopify often expects a full 6-character postal code for CA
-        // If we only have 3 (e.g., M5V), we pad it to a valid format (M5V 1A1)
-        if (cleanZip.length === 3) return `${cleanZip} 1A1`;
-        return cleanZip;
-      }
-      
-      if (countryCode === 'US') {
-        // Ensure 5 digits for US
-        if (cleanZip.length < 5) return cleanZip.padStart(5, '0');
-        return cleanZip.substring(0, 5);
-      }
-      
+      if (countryCode === 'CA' && cleanZip.length === 3) return `${cleanZip} 1A1`;
+      if (countryCode === 'US' && cleanZip.length < 5) return cleanZip.padStart(5, '0');
       return cleanZip;
     };
 
@@ -153,11 +156,10 @@
 
       let detectedShipping = config.defaultShippingCents;
       let detectedCity = '';
-      let detectedCountryName = config.countryName;
       let detectedCountryCode = config.countryCode;
+      let detectedCountryName = config.countryName;
 
       try {
-        // 1. Get precise location from ipinfo.io
         const ipResponse = await fetch('https://ipinfo.io/json');
         if (!ipResponse.ok) throw new Error('ipinfo.io failed');
         const ipData = await ipResponse.json();
@@ -166,31 +168,52 @@
         detectedCountryCode = ipData.country;
         detectedCountryName = ipData.country;
         
-        const rawZip = ipData.postal || '';
+        const zip = normalizeZip(ipData.postal || '', detectedCountryCode);
         const province = ipData.region || '';
-        const zip = normalizeZip(rawZip, detectedCountryCode);
 
-        // 2. Fetch real shipping rates from Shopify using precise location
-        const shipUrl = `/cart/shipping_rates.json?shipping_address[country]=${detectedCountryCode}&shipping_address[province]=${encodeURIComponent(province)}&shipping_address[zip]=${encodeURIComponent(zip)}`;
-        const shipResponse = await fetch(shipUrl);
-        
-        if (shipResponse.ok) {
-          const shipData = await shipResponse.json();
-          if (shipData.shipping_rates && shipData.shipping_rates.length > 0) {
-            const lowestRate = shipData.shipping_rates.reduce((prev, curr) => 
-              parseFloat(curr.price) < parseFloat(prev.price) ? curr : prev
-            );
-            detectedShipping = parseFloat(lowestRate.price) * 100;
+        const fetchRates = async () => {
+          const shipUrl = `/cart/shipping_rates.json?shipping_address[country]=${detectedCountryCode}&shipping_address[province]=${encodeURIComponent(province)}&shipping_address[zip]=${encodeURIComponent(zip)}`;
+          const response = await fetch(shipUrl);
+          if (response.ok) {
+            const data = await response.json();
+            return data.shipping_rates || [];
           }
-        } else {
-          const errorData = await shipResponse.json();
-          console.warn('Shopify Shipping API error details:', errorData);
+          return [];
+        };
+
+        // 2. Silent Add with a small delay to ensure session consistency
+        await fetch('/cart/add.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: [{ id: config.variantId, quantity: 1 }] })
+        });
+
+        // Give Shopify a moment to update the session
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const rates = await fetchRates();
+
+        // 3. Silent Remove
+        await fetch('/cart/change.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: config.variantId.toString(), quantity: 0 })
+        });
+
+        if (rates.length > 0) {
+          // Find the lowest shipping rate and round to nearest cent
+          const lowestRate = rates.reduce((prev, curr) => 
+            parseFloat(curr.price) < parseFloat(prev.price) ? curr : prev
+          );
+          detectedShipping = Math.round(parseFloat(lowestRate.price) * 100);
+          console.log('True Total: Detected real shipping rate:', detectedShipping);
         }
       } catch (e) {
         console.warn('True Total: Dynamic estimation failed, using defaults.', e);
       }
 
       const detectedTax = countryTaxRates[detectedCountryCode] || config.defaultTaxPercent;
+      console.log('True Total: Final calculation values:', { shipping: detectedShipping, tax: detectedTax, city: detectedCity });
       updateUI(detectedShipping, detectedTax, detectedCity, detectedCountryName);
     };
 
