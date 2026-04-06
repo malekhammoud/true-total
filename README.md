@@ -1,78 +1,43 @@
-# Shopify App Template - Extension only
+# True Total - Estimated Total Price Block
 
-This is a template for building an [extension-only Shopify app](https://shopify.dev/docs/apps/build/app-extensions/build-extension-only-app). It contains the basics for building a Shopify app that uses only app extensions.
+**True Total** is a lightweight, frontend-only Shopify Theme App Extension that helps customers see the *real* final cost of a product—including estimated shipping and taxes—directly on the product page. By showing the "True Total" early, you reduce checkout friction and abandoned carts.
 
-This template doesn't include a server or the ability to embed a page in the Shopify Admin. If you want either of these capabilities, choose the [Remix app template](https://github.com/Shopify/shopify-app-template-remix) instead.
+## 🚀 Key Features
 
-Whether you choose to use this template or another one, you can use your preferred package manager and the Shopify CLI with [these steps](#installing-the-template).
+- **Dynamic Location Detection:** Automatically detects the visitor's City and Country via IP-based geolocation (using `ipinfo.io`).
+- **Real-Time Shipping Rates:** Uses Shopify's native AJAX API to fetch actual shipping costs from your store's configuration for the visitor's specific location.
+- **Global Tax Estimation:** Includes a built-in tax/VAT matrix for 14+ major global markets (US, CA, UK, EU, AU, JP, etc.).
+- **Smart Tax Logic:** Automatically respects your store's "Taxes Included" setting to prevent double-charging in the estimate.
+- **Zero-Backend / No Tokens:** Works entirely on the frontend. Merchants don't need to manage API tokens or setup complex backends.
+- **Fully Customizable:**
+  - Edit the message template using placeholders: `{city}`, `{country}`, and `{price}`.
+  - Adjust font sizes and icon widths to match your theme's branding.
+  - Set "Default Rates" for regions not covered by dynamic detection.
 
-## Benefits
+## 🛠️ Installation & Setup
 
-Shopify apps are built on a variety of Shopify tools to create a great merchant experience. The [create an app](https://shopify.dev/docs/apps/getting-started/create) tutorial in our developer documentation will guide you through creating a Shopify app.
+1. **Install the Extension:** Deploy the app to your store via the Shopify CLI.
+2. **Add the Block:**
+   - Go to your **Online Store > Themes > Customize**.
+   - Navigate to any **Product Page**.
+   - Click **Add Block** in the product information section and select **Estimated Total**.
+3. **Configure Settings:**
+   - **Default Shipping/Tax:** Set fallback rates for when dynamic detection is unavailable.
+   - **Message Template:** Customize the text (e.g., "Final total for {city}: {price}").
+   - **Styling:** Adjust the font size and icon width to fit your design.
 
-This app template does little more than install the CLI and scaffold a repository.
+## 🧠 How It Works (Technical Detail)
 
-## Getting started
+- **Location:** Fetches precise location (City, ZIP, Province) via `ipinfo.io`.
+- **Shipping:** Uses a "Silent Add" trick—temporarily adding the product to a hidden cart, fetching the real shipping rates from `/cart/shipping_rates.json`, and then immediately removing it. This ensures 100% accuracy based on your store's shipping zones.
+- **Tax:** Combines the subtotal (Price + Shipping) with a regional tax matrix to estimate the final VAT or Sales Tax.
+- **Resilience:** If any API fetch fails, the block gracefully falls back to your merchant-configured "Default Rates."
 
-### Requirements
+## 💻 Developer Resources
 
-1. You must [download and install Node.js](https://nodejs.org/en/download/) if you don't already have it.
-1. You must [create a Shopify partner account](https://partners.shopify.com/signup) if you don’t have one.
-1. You must create a store for testing if you don't have one, either a [development store](https://help.shopify.com/en/partners/dashboard/development-stores#create-a-development-store) or a [Shopify Plus sandbox store](https://help.shopify.com/en/partners/dashboard/managing-stores/plus-sandbox-store).
+- [Shopify Theme App Extensions Documentation](https://shopify.dev/docs/apps/build/app-extensions/build-extension-only-app)
+- [Shopify CLI Reference](https://shopify.dev/docs/apps/tools/cli)
 
-### Installing the template
+---
 
-This template can be installed using your preferred package manager:
-
-Using yarn:
-
-```shell
-yarn create @shopify/app
-```
-
-Using npm:
-
-```shell
-npm init @shopify/app@latest
-```
-
-Using pnpm:
-
-```shell
-pnpm create @shopify/app@latest
-```
-
-This will clone the template and install the required dependencies.
-
-#### Local Development
-
-[The Shopify CLI](https://shopify.dev/docs/apps/tools/cli) connects to an app in your Partners dashboard. It provides environment variables and runs commands in parallel.
-
-You can develop locally using your preferred package manager. Run one of the following commands from the root of your app.
-
-Using yarn:
-
-```shell
-yarn dev
-```
-
-Using npm:
-
-```shell
-npm run dev
-```
-
-Using pnpm:
-
-```shell
-pnpm run dev
-```
-
-Open the URL generated in your console. Once you grant permission to the app, you can start development (such as generating extensions).
-
-## Developer resources
-
-- [Introduction to Shopify apps](https://shopify.dev/docs/apps/getting-started)
-- [App extensions](https://shopify.dev/docs/apps/build/app-extensions)
-- [Extension only apps](https://shopify.dev/docs/apps/build/app-extensions/build-extension-only-app)
-- [Shopify CLI](https://shopify.dev/docs/apps/tools/cli)
+Developed as a high-performance, standalone Shopify extension.
