@@ -1,43 +1,41 @@
-# True Total - Estimated Total Price Block
+# True Total Estimated Total Price Block
 
-**True Total** is a lightweight, frontend-only Shopify Theme App Extension that helps customers see the *real* final cost of a product—including estimated shipping and taxes—directly on the product page. By showing the "True Total" early, you reduce checkout friction and abandoned carts.
+True Total is a frontend-only Shopify Theme App Extension designed to display the comprehensive final cost of a product, including estimated shipping and taxes, directly on the product page. By providing transparent pricing early in the buyer journey, this extension aims to reduce checkout friction and minimize cart abandonment.
 
-## 🚀 Key Features
+## Key Features
 
-- **Dynamic Location Detection:** Automatically detects the visitor's City and Country via IP-based geolocation (using `ipinfo.io`).
-- **Real-Time Shipping Rates:** Uses Shopify's native AJAX API to fetch actual shipping costs from your store's configuration for the visitor's specific location.
-- **Global Tax Estimation:** Includes a built-in tax/VAT matrix for 14+ major global markets (US, CA, UK, EU, AU, JP, etc.).
-- **Smart Tax Logic:** Automatically respects your store's "Taxes Included" setting to prevent double-charging in the estimate.
-- **Zero-Backend / No Tokens:** Works entirely on the frontend. Merchants don't need to manage API tokens or setup complex backends.
-- **Fully Customizable:**
-  - Edit the message template using placeholders: `{city}`, `{country}`, and `{price}`.
-  - Adjust font sizes and icon widths to match your theme's branding.
-  - Set "Default Rates" for regions not covered by dynamic detection.
+* Precise Location Detection: Automatically identifies the visitor's city and country using IP-based geolocation via ipinfo.io.
+* Real-Time Shipping Calculations: Utilizes the native Shopify AJAX API to retrieve actual shipping costs based on the merchant's specific store configuration and the visitor's location.
+* International Tax Estimation: Includes a comprehensive tax and VAT matrix for major global markets, including North America, Europe, Asia, and Oceania.
+* Integrated Tax Logic: Respects the Shopify "Taxes Included" setting to ensure accuracy and prevent redundant tax additions in the final estimate.
+* Standalone Architecture: Operates entirely on the frontend without the requirement for a backend server or API tokens, ensuring a simplified deployment process.
+* Customization Options:
+    * Configurable message templates with placeholders for city, country, and price.
+    * Adjustable font sizes and icon dimensions to maintain brand consistency.
+    * Manual override settings for default shipping and tax rates.
 
-## 🛠️ Installation & Setup
+## Installation and Configuration
 
-1. **Install the Extension:** Deploy the app to your store via the Shopify CLI.
-2. **Add the Block:**
-   - Go to your **Online Store > Themes > Customize**.
-   - Navigate to any **Product Page**.
-   - Click **Add Block** in the product information section and select **Estimated Total**.
-3. **Configure Settings:**
-   - **Default Shipping/Tax:** Set fallback rates for when dynamic detection is unavailable.
-   - **Message Template:** Customize the text (e.g., "Final total for {city}: {price}").
-   - **Styling:** Adjust the font size and icon width to fit your design.
+1. Deployment: Deploy the extension to the target Shopify store using the Shopify CLI.
+2. Integration:
+    * Navigate to the Shopify Online Store, select Themes, and then Customize.
+    * Open the Product Page template.
+    * Add the Estimated Total block to the product information section.
+3. Configuration:
+    * Define default shipping and tax rates to serve as fallbacks for unmapped regions.
+    * Customize the message template to align with the store's voice.
+    * Adjust visual parameters, including font size and icon width, within the block settings.
 
-## 🧠 How It Works (Technical Detail)
+## Technical Methodology
 
-- **Location:** Fetches precise location (City, ZIP, Province) via `ipinfo.io`.
-- **Shipping:** Uses a "Silent Add" trick—temporarily adding the product to a hidden cart, fetching the real shipping rates from `/cart/shipping_rates.json`, and then immediately removing it. This ensures 100% accuracy based on your store's shipping zones.
-- **Tax:** Combines the subtotal (Price + Shipping) with a regional tax matrix to estimate the final VAT or Sales Tax.
-- **Resilience:** If any API fetch fails, the block gracefully falls back to your merchant-configured "Default Rates."
+* Location Services: Precise geographical data, including City, ZIP code, and Province, is retrieved via the ipinfo.io API.
+* Shipping Rate Retrieval: The extension employs a transient cart operation. It temporarily adds the selected product variant to a background cart, requests real-time shipping rates from the Shopify AJAX endpoint, and immediately removes the item. This method ensures that shipping costs are calculated based on the merchant's live shipping zones and product specifications.
+* Tax Calculation: The final estimate combines the subtotal (product price and shipping) with a regional tax matrix to calculate estimated VAT or Sales Tax.
+* System Resilience: In the event of an API failure or an unsupported region, the system automatically reverts to the merchant-defined default rates.
 
-## 💻 Developer Resources
+## Developer Documentation
 
-- [Shopify Theme App Extensions Documentation](https://shopify.dev/docs/apps/build/app-extensions/build-extension-only-app)
-- [Shopify CLI Reference](https://shopify.dev/docs/apps/tools/cli)
+* Shopify Theme App Extensions Documentation: https://shopify.dev/docs/apps/build/app-extensions/build-extension-only-app
+* Shopify CLI Reference: https://shopify.dev/docs/apps/tools/cli
 
----
-
-Developed as a high-performance, standalone Shopify extension.
+This extension is developed as a high-performance standalone solution for the Shopify platform.
