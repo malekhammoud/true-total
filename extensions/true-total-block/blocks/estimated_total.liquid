@@ -6,28 +6,30 @@
   "settings": [
     {
       "type": "checkbox",
-      "id": "use_flat_rate",
-      "label": "Use Flat Rate Override",
-      "default": false
+      "id": "use_default_only",
+      "label": "Use Default Rates Only",
+      "default": false,
+      "info": "Bypasses all dynamic estimation and uses the rates below."
     },
     {
       "type": "number",
-      "id": "flat_shipping_rate",
-      "label": "Flat Shipping Rate (Cents)",
-      "default": 500,
-      "info": "Example: 500 for 5.00"
+      "id": "default_shipping_rate",
+      "label": "Default Shipping Rate (Cents)",
+      "default": 1000,
+      "info": "Used for shipping if dynamic detection fails. Example: 1000 for 10.00"
     },
     {
       "type": "number",
-      "id": "flat_tax_rate_percent",
-      "label": "Flat Tax Rate (%)",
-      "default": 10
+      "id": "default_tax_rate",
+      "label": "Default Tax Rate (%)",
+      "default": 15,
+      "info": "Used for tax if dynamic detection fails."
     },
     {
       "type": "range",
       "id": "font_size",
-      "min": 5,
-      "max": 24,
+      "min": 10,
+      "max": 30,
       "step": 1,
       "unit": "px",
       "label": "Font Size",
@@ -37,8 +39,8 @@
       "type": "text",
       "id": "message_template",
       "label": "Message Template",
-      "default": "Estimated total with shipping and tax for {city}, {country}: {price}",
-      "info": "Use {city}, {country}, and {price} as placeholders."
+      "default": "Estimated total with shipping and tax for {country}: {price}",
+      "info": "Use {country} and {price} as placeholders."
     }
   ]
 }
@@ -47,75 +49,151 @@
 <div 
   class="estimated-total-container" 
   data-product-price="{{ product.price }}" 
-  data-use-flat-rate="{{ block.settings.use_flat_rate }}" 
-  data-flat-shipping="{{ block.settings.flat_shipping_rate }}" 
-  data-flat-tax-percent="{{ block.settings.flat_tax_rate_percent }}"
-  data-currency-code="{{ cart.currency.iso_code | default: 'USD' }}"
+  data-use-default-only="{{ block.settings.use_default_only }}" 
+  data-default-shipping="{{ block.settings.default_shipping_rate }}" 
+  data-default-tax="{{ block.settings.default_tax_rate }}"
+  data-currency-code="{{ cart.currency.iso_code | default: localization.country.currency.iso_code }}"
+  data-country-code="{{ localization.country.iso_code }}"
+  data-country-name="{{ localization.country.name }}"
+  data-money-format="{{ shop.money_format | escape }}"
   data-message-template="{{ block.settings.message_template | escape }}"
   style="margin: 10px 0; padding: 10px; border: 1px solid #eaeaea; border-radius: 4px;"
 >
-  <p id="estimated-total-message" style="margin: 0; font-weight: bold; color: #333; font-size: {{ block.settings.font_size }}px;">Calculating estimated total...</p>
+  <p id="estimated-total-message" style="margin: 0; font-weight: bold; color: #333; font-size: {{ block.settings.font_size }}px;">
+    Calculating estimated total...
+  </p>
 </div>
 
 <script>
-  document.addEventListener("DOMContentLoaded", function() {
+  (function() {
     const container = document.querySelector('.estimated-total-container');
     if (!container) return;
 
-    const basePriceCents = parseInt(container.getAttribute('data-product-price'), 10) || 0;
-    const useFlatRate = container.getAttribute('data-use-flat-rate') === 'true';
-    const flatShippingCents = parseInt(container.getAttribute('data-flat-shipping'), 10) || 0;
-    const flatTaxPercent = parseFloat(container.getAttribute('data-flat-tax-percent')) || 0;
-    const currencyCode = container.getAttribute('data-currency-code') || 'USD';
-    const messageTemplate = container.getAttribute('data-message-template');
+    const config = {
+      basePriceCents: parseInt(container.getAttribute('data-product-price'), 10) || 0,
+      useDefaultOnly: container.getAttribute('data-use-default-only') === 'true',
+      defaultShippingCents: parseInt(container.getAttribute('data-default-shipping'), 10) || 0,
+      defaultTaxPercent: parseFloat(container.getAttribute('data-default-tax')) || 0,
+      currencyCode: container.getAttribute('data-currency-code') || 'USD',
+      countryCode: container.getAttribute('data-country-code'),
+      countryName: container.getAttribute('data-country-name'),
+      moneyFormat: container.getAttribute('data-money-format') || '${{amount}}',
+      messageTemplate: container.getAttribute('data-message-template')
+    };
 
     const messageEl = document.getElementById('estimated-total-message');
 
-    // Helper to format currency
-    const formatCurrency = (cents) => {
-      const formatter = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: currencyCode,
-      });
-      return formatter.format(cents / 100);
+    // Robust tax rate estimations for common markets
+    const countryTaxRates = {
+      'US': 8.5,   // Average US state tax
+      'CA': 13.0,  // Average Canadian HST/GST
+      'GB': 20.0,  // UK VAT
+      'AU': 10.0,  // AU GST
+      'DE': 19.0,  // DE VAT
+      'FR': 20.0,  // FR VAT
+      'IT': 22.0,  // IT VAT
+      'ES': 21.0,  // ES VAT
+      'NL': 21.0,  // NL VAT
+      'JP': 10.0,  // JP VAT
+      'SG': 8.0,   // SG GST
+      'BR': 60.0,  // Brazil import tax estimate
+      'MX': 16.0,  // MX VAT
+      'IN': 18.0   // IN GST
     };
 
-    // Helper to calculate and display total
-    const displayTotal = (shippingCents, taxPercent, city, country) => {
-      const estimatedTotalCents = Math.round((basePriceCents + shippingCents) * (1 + (taxPercent / 100)));
-      const formattedTotal = formatCurrency(estimatedTotalCents);
+    const formatPrice = (cents) => {
+      if (window.Shopify && window.Shopify.formatMoney) {
+        return Shopify.formatMoney(cents, config.moneyFormat);
+      }
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: config.currencyCode,
+      }).format(cents / 100);
+    };
+
+    const updateUI = (shippingCents, taxPercent, city, country) => {
+      const taxAmount = (config.basePriceCents + shippingCents) * (taxPercent / 100);
+      const totalCents = config.basePriceCents + shippingCents + taxAmount;
       
-      let message = messageTemplate
-        .replace('{city}', city || 'your location')
-        .replace('{country}', country || '')
-        .replace('{price}', formattedTotal);
+      let message = config.messageTemplate
+        .replace('{city}', city || '')
+        .replace('{country}', country || config.countryName)
+        .replace('{price}', formatPrice(totalCents));
       
-      message = message.replace(', ,', ',').replace(' ,', '').trim();
+      // Cleanup cleanup
+      message = message.replace(', ,', ',').replace(' ,', '').replace(/  +/g, ' ').trim();
       messageEl.textContent = message;
     };
 
-    const fetchLocation = async () => {
-      try {
-        const response = await fetch('https://ipinfo.io/json');
-        if (!response.ok) throw new Error('ipinfo.io failed');
-        const data = await response.json();
-        
-        // ipinfo.io returns 'city' and 'country' (country code)
-        // For a more user-friendly name, we can just use the code or a simple mapping
-        displayTotal(800, 7.5, data.city, data.country);
-      } catch (e) {
-        console.error('Error fetching location:', e);
-        // Fallback: use flat rates
-        displayTotal(flatShippingCents, flatTaxPercent, 'your location', '');
+    const normalizeZip = (zip, countryCode) => {
+      if (!zip) return '';
+      const cleanZip = zip.replace(/\s+/g, '').toUpperCase();
+      
+      if (countryCode === 'CA') {
+        // Shopify often expects a full 6-character postal code for CA
+        // If we only have 3 (e.g., M5V), we pad it to a valid format (M5V 1A1)
+        if (cleanZip.length === 3) return `${cleanZip} 1A1`;
+        return cleanZip;
       }
+      
+      if (countryCode === 'US') {
+        // Ensure 5 digits for US
+        if (cleanZip.length < 5) return cleanZip.padStart(5, '0');
+        return cleanZip.substring(0, 5);
+      }
+      
+      return cleanZip;
     };
 
-    // If using flat rate, bypass API
-    if (useFlatRate) {
-      displayTotal(flatShippingCents, flatTaxPercent, 'your location', '');
-      return;
-    }
+    const runEstimation = async () => {
+      if (config.useDefaultOnly) {
+        updateUI(config.defaultShippingCents, config.defaultTaxPercent, '', config.countryName);
+        return;
+      }
 
-    fetchLocation();
-  });
+      let detectedShipping = config.defaultShippingCents;
+      let detectedCity = '';
+      let detectedCountryName = config.countryName;
+      let detectedCountryCode = config.countryCode;
+
+      try {
+        // 1. Get precise location from ipinfo.io
+        const ipResponse = await fetch('https://ipinfo.io/json');
+        if (!ipResponse.ok) throw new Error('ipinfo.io failed');
+        const ipData = await ipResponse.json();
+        
+        detectedCity = ipData.city;
+        detectedCountryCode = ipData.country;
+        detectedCountryName = ipData.country;
+        
+        const rawZip = ipData.postal || '';
+        const province = ipData.region || '';
+        const zip = normalizeZip(rawZip, detectedCountryCode);
+
+        // 2. Fetch real shipping rates from Shopify using precise location
+        const shipUrl = `/cart/shipping_rates.json?shipping_address[country]=${detectedCountryCode}&shipping_address[province]=${encodeURIComponent(province)}&shipping_address[zip]=${encodeURIComponent(zip)}`;
+        const shipResponse = await fetch(shipUrl);
+        
+        if (shipResponse.ok) {
+          const shipData = await shipResponse.json();
+          if (shipData.shipping_rates && shipData.shipping_rates.length > 0) {
+            const lowestRate = shipData.shipping_rates.reduce((prev, curr) => 
+              parseFloat(curr.price) < parseFloat(prev.price) ? curr : prev
+            );
+            detectedShipping = parseFloat(lowestRate.price) * 100;
+          }
+        } else {
+          const errorData = await shipResponse.json();
+          console.warn('Shopify Shipping API error details:', errorData);
+        }
+      } catch (e) {
+        console.warn('True Total: Dynamic estimation failed, using defaults.', e);
+      }
+
+      const detectedTax = countryTaxRates[detectedCountryCode] || config.defaultTaxPercent;
+      updateUI(detectedShipping, detectedTax, detectedCity, detectedCountryName);
+    };
+
+    runEstimation();
+  })();
 </script>
